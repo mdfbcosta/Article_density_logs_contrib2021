@@ -1,0 +1,206 @@
+clc
+clear all
+close all
+
+% --------------------------------------------------------
+% Choose the equation used to estimate Shale volume - Vsh.
+% --------------------------------------------------------
+ivsh = 1;
+% 1 --> for Larionov Tertiary rock
+% 2 --> for Larionov Older rock
+% 3 --> for Steiber
+% 4 --> for Clavier
+
+% ---- Descomente abaixo se a leitura for feita usando "loadlas" ---------
+
+[datastr,data,colnames,header] = loadlas('dado7.las');
+
+dep   = datastr.dept*0.3048;
+vp    = (1./datastr.dt)*0.3048*1.e+3;
+rhob1 = datastr.rhob;
+rhob  = dispike(rhob1,0.1,50);
+[vsh1]= calc_vsh(datastr.gr,1);
+vsh   = dispike(vsh1,0.228,50);
+cali  = datastr.cali*2.54;
+
+% ------------------------------------------------------------------------
+
+% ---- Descomente abaixo se a leitura for feita usando apenas o "load" ---
+
+% arq = load('well_log_fil.txt');
+% 
+% dep   = arq(:,1)*0.3048;
+% vp    = (1./arq(:,11))*0.3048*1.e+3;
+% rhob1 = arq(:,4);
+% rhob  = dispike(rhob1,0.1,50);
+% [vsh1]= calc_vsh(arq(:,3),ivsh);
+% vsh   = dispike(vsh1,0.228,50);
+% cali  = arq(:,2)*2.54;
+
+% ------------------------------------------------------------------------
+
+% Gerando figura dos Perfis lidos no arquivo de entrada ------------------
+
+uiwait (msgbox({'In the following figure, choose a range for which the parameters will be estimated.';...
+    '   ';'First, choose the TOP point and after the BOTTOM point'}));
+
+quest = 1;
+
+while (quest ~= 0)
+
+    figure(1)
+
+    subplot(1,4,1)
+    plot(vp,dep,'LineWidth',1)
+    ylim([dep(1) dep(length(dep))])
+    ylabel('Depth [km]')
+    xlabel('Velocity [km/s]')
+    set(gca,'YDir','reverse')
+    set(gca,'FontSize',18)
+    box off
+    grid on
+
+    subplot(1,4,2)
+    hold on
+    plot(rhob1,dep,'LineWidth',1)
+    plot(rhob,dep,'LineWidth',1)
+    ylim([dep(1) dep(length(dep))])
+    xlabel('Density [g/cm3]')
+    set(gca,'YDir','reverse')
+    set(gca,'FontSize',18)
+    legend('\rho well','\rho filt')
+    box off
+    grid on
+
+    subplot(1,4,3)
+    hold on
+    plot(vsh1,dep,'LineWidth',1)
+    plot(vsh,dep,'LineWidth',1)
+    ylim([dep(1) dep(length(dep))])
+    xlabel('Vsh (decimal)')
+    set(gca,'YDir','reverse')
+    set(gca,'FontSize',18)
+    legend('Vsh orig','Vsh filt')
+    box off
+    grid on
+
+    subplot(1,4,4)
+    plot(cali,dep,'LineWidth',1)
+    ylim([dep(1) dep(length(dep))])
+    xlabel('Caliper [cm]')
+    set(gca,'YDir','reverse')
+    set(gca,'FontSize',18)
+    box off
+    grid on
+
+    suptitle('Some Well-Logging Profiles')
+    
+    set(gcf,'PaperPositionMode','auto');         
+    set(gcf,'PaperOrientation','landscape');
+    set(gcf,'Position',[50 50 1400 1000]);
+
+    [y lim] = ginput(2)
+    
+    % --- Box Ask the user whether or not to repeat their choice of points.
+    answer = questdlg('Would you like to choose again?', ...
+        'Dessert Menu', ...
+        'Yes','No thank you','No thank you');
+    % Handle response
+    switch answer
+        case 'Yes'
+            quest = 1;
+        case 'No thank you'
+            quest = 0;
+    end
+    % ------------------------------------------------------------------
+    
+    clearvars y
+    close all
+    
+end
+
+%% Call the function GAUNEW to approximate the Bulk Density ----------
+
+disp('limites picking:'); lim; % Sho
+
+[LIM] = cutlog(lim(1),lim(2),dep); % Cut the part of well analysed
+%
+vp_cut   = vp(LIM(1):LIM(2));       % [km/s]
+rhob_cut = rhob(LIM(1):LIM(2));     % [g/cm^3]
+vsh_cut  = vsh(LIM(1):LIM(2));      % decimal 
+
+[gn] = gaunew (rhob_cut,vp_cut,vsh_cut);
+
+% Bulk density estimated with no-linear equation
+rhob_gn = [gn(1)*(vp + gn(2)*vsh).^gn(3)];
+
+% Relative error of the last estimative
+re = (rhob - rhob_gn)./rhob;
+
+%% Created the figures
+
+figure(100)
+ylimite = [350 750];
+
+subplot(1,4,1)
+hold on
+box off
+grid on
+plot(rhob,dep,'LineWidth',1)
+set(gca,'YDir','reverse')
+plot(rhob_gn,dep,'LineWidth',1)
+axis tight
+ylim(ylimite)
+set(gca,'YDir','reverse')
+set(gca,'FontSize',18)
+legend('\rho_{real}','\rho_{cal}')
+ylabel('Depth [m]')
+xlabel('\rho_B [g/cm3]')
+
+subplot(1,4,2)
+plot(re,dep,'LineWidth',1)
+axis tight
+ylim(ylimite)    
+set(gca,'YDir','reverse')
+set(gca,'FontSize',18)
+xlabel('R.E [g/cm3]')
+box off
+grid on
+
+subplot(1,4,3)
+plot(vsh,dep,'LineWidth',1)
+axis tight
+ylim(ylimite)    
+xlabel('Vsh (decimal)')
+set(gca,'YDir','reverse')
+set(gca,'FontSize',18)
+box off
+grid on
+
+subplot(1,4,4)
+plot(cali,dep,'LineWidth',1)
+axis tight
+ylim(ylimite)
+xlabel('Caliper [cm]')
+set(gca,'YDir','reverse')
+set(gca,'FontSize',18)
+box off
+grid on
+
+suptitle('Estimated Bulk Density using the approximation: \rho_B = A(V_P + G V_{SH})^m')
+
+set(gcf,'PaperPositionMode','auto');         
+set(gcf,'PaperOrientation','landscape');
+set(gcf,'Position',[50 50 1400 1000]);
+
+erro2 = immse(rhob,rhob_gn)
+
+
+% ++++++++++++++++++++++++++++++++++++++++++++
+% Estimative for other Wells
+% ++++++++++++++++++++++++++++++++++++++++++++
+% Choose the Well switching the number of iwell:
+% --> 1 for Well 1
+% --> 2 for Well 2 ...
+iwell = 3;
+[err] = estimaOtherWells(gn,iwell,ivsh)
